@@ -4,20 +4,19 @@
 
 ## Запуск с пустой базой
 
-Нужен запущенный PostgreSQL и Python 3.11+. Установщик для Windows доступен на [странице PostgreSQL](https://www.postgresql.org/download/windows/). Запомните пароль пользователя `postgres` и убедитесь, что команда `psql` доступна в терминале (при необходимости добавьте папку `bin` PostgreSQL в `PATH`). Из корня проекта в PowerShell:
+Нужен запущенный PostgreSQL и Python 3.11+. Установщик для Windows доступен на [странице PostgreSQL](https://www.postgresql.org/download/windows/). Запомните пароль пользователя `postgres`. Из корня проекта в PowerShell:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-psql -U postgres -c 'CREATE DATABASE checkstock'
-$env:DATABASE_URL = 'postgresql://postgres:YOUR_PASSWORD@localhost:5432/checkstock'
-python -m checkstock.migrate
-python -m checkstock.seed
+Copy-Item .env.example .env
+# В .env замените YOUR_PASSWORD на ваш пароль postgres
+python -m checkstock.bootstrap
 python -m uvicorn checkstock.api:app --host 127.0.0.1 --port 8000
 ```
 
-Откройте http://127.0.0.1:8000. Интерактивная документация API: http://127.0.0.1:8000/docs. Если база уже существует, пропустите `CREATE DATABASE`; повторные миграция и заполнение тестовыми данными не удваивают исходные остатки. Пароль в URL должен быть закодирован как URL, если содержит специальные символы. Не коммитьте рабочий пароль.
+Откройте http://127.0.0.1:8000. Интерактивная документация API: http://127.0.0.1:8000/docs. `bootstrap` создаёт базы `checkstock` и `checkstock_test`, если их ещё нет, применяет миграцию и добавляет исходные данные. Повторный запуск не удваивает исходные остатки. Пароль в URL должен быть закодирован как URL, если содержит специальные символы. Файл `.env` исключён из Git; не коммитьте рабочий пароль.
 
 Начальные данные: SKU-101 «Органайзер» — Север 10, Юг 6; SKU-102 «Контейнер» — Север 5, Юг 0; SKU-103 «Корзина» — Север 0, Юг 4.
 
@@ -34,8 +33,6 @@ python -m uvicorn checkstock.api:app --host 127.0.0.1 --port 8000
 Используйте **отдельную пустую тестовую базу** с именем, оканчивающимся на `_test`: тесты очищают в ней таблицы перед каждым сценарием и откажутся запускаться с другим именем.
 
 ```powershell
-psql -U postgres -c 'CREATE DATABASE checkstock_test'
-$env:TEST_DATABASE_URL = 'postgresql://postgres:YOUR_PASSWORD@localhost:5432/checkstock_test'
 python -m unittest discover -s tests -v
 ```
 
