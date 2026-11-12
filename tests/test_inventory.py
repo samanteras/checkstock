@@ -286,3 +286,18 @@ class InventoryTests(unittest.TestCase):
                 "warehouse_id": self.w["Юг"], "quantity": 1, "idempotency_key": "http-shortage"})
             self.assertEqual(response.status_code, 409)
             self.assertIn("доступно 0", response.json()["detail"])
+
+    def test_http_receipt_updates_stock_and_history(self):
+        body = {"product_id": self.p["SKU-103"], "warehouse_id": self.w["Юг"],
+                "quantity": 2, "idempotency_key": "http-receipt"}
+        with TestClient(app) as client:
+            first = client.post("/api/receipts", json=body)
+            second = client.post("/api/receipts", json=body)
+            self.assertEqual(first.status_code, 201)
+            self.assertEqual(second.json()["id"], first.json()["id"])
+            rows = client.get("/api/stock").json()["balances"]
+            south = next(r for r in rows if r["sku"] == "SKU-103" and r["warehouse_name"] == "Юг")
+            self.assertEqual((south["physical"], south["available"]), (6, 6))
+            events = client.get("/api/history").json()["items"]
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["action"], "receipt")
