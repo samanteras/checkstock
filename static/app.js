@@ -2,10 +2,31 @@ const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[c]);
 let catalog = {products: [], warehouses: [], open_operations: []};
 let historyCursor = null;
+const operationCopy = {
+  receipt: {source: "Склад прихода", button: "Оформить приход", result: "Приход", next: "оформлен"},
+  fbs: {source: "Склад резерва", button: "Зарезервировать", result: "Резерв FBS", next: "создан — отправьте товар или отмените резерв"},
+  transfer: {source: "Склад отправки", button: "Отправить перемещение", result: "Перемещение", next: "отправлено — требуется приёмка на складе назначения"},
+  fbo: {source: "Склад отправки", button: "Отправить FBO", result: "Поставка FBO", next: "отправлена — требуется приёмка маркетплейсом"},
+};
 
 function message(text, error = false, target = "message") {
   $(target).textContent = text;
   $(target).classList.toggle("error", error);
+}
+
+function clearFeedback() {
+  for (const id of ["message", "operation-message", "warehouse-message", "pending-message"]) message("", false, id);
+}
+
+function showOperationResult(id, kind) {
+  const copy = operationCopy[kind];
+  message(`${copy.result} #${id} ${copy.next}`, false, "operation-message");
+  if (kind !== "receipt") {
+    const link = document.createElement("a");
+    link.href = "#pending-section";
+    link.textContent = "Перейти к подтверждению";
+    $("operation-message").append(link);
+  }
 }
 
 async function request(path, options = {}) {
@@ -33,12 +54,15 @@ function renderCatalog() {
     (w) => `${w.name}${w.archived_at ? " (архив)" : ""}`);
   $("target-select").innerHTML = selectOptions(active, (w) => w.name);
   for (const [id, value] of Object.entries(prior)) if (value && $(id).querySelector(`option[value="${value}"]`)) $(id).value = value;
-  $("target-field").hidden = form.elements.namedItem("kind").value !== "transfer";
-  $("warehouses").innerHTML = all.map((w) => `<div class="item"><span>${esc(w.name)} ${w.archived_at ? '<span class="badge">архив</span>' : ""}</span><span class="actions"><button class="secondary" data-action="rename" data-id="${w.id}">Переименовать</button>${w.archived_at ? "" : `<button class="danger" data-action="archive" data-id="${w.id}">Удалить</button>`}</span></div>`).join("");
+  const kind = form.elements.namedItem("kind").value;
+  $("target-field").hidden = kind !== "transfer";
+  $("source-label").textContent = operationCopy[kind].source;
+  $("operation-submit").textContent = operationCopy[kind].button;
+  $("warehouses").innerHTML = all.map((w) => `<div class="item"><span>${esc(w.name)} ${w.archived_at ? '<span class="badge">архив</span>' : ""}</span><span class="actions"><button class="secondary" data-action="rename" data-id="${w.id}">Переименовать</button>${w.archived_at ? `<button class="secondary" data-action="restore" data-id="${w.id}">Восстановить</button>` : `<button class="danger" data-action="archive" data-id="${w.id}">Архивировать</button>`}</span></div>`).join("");
   $("pending").innerHTML = catalog.open_operations.length ? catalog.open_operations.map((o) => {
-    const buttons = o.kind === "fbs" ? `<button data-action="ship_fbs" data-id="${o.id}">Отправить FBS</button><button class="secondary" data-action="cancel_fbs" data-id="${o.id}">Отменить резерв</button>` : `<button data-action="receive_${o.kind}" data-id="${o.id}">Принять</button>`;
-    return `<div class="item"><span><strong>#${o.id} ${esc(o.sku)}</strong> · ${o.quantity} шт. · ${esc(o.source_name || "")} ${o.target_name ? `→ ${esc(o.target_name)}` : ""}</span><span class="actions">${buttons}</span></div>`;
-  }).join("") : '<p class="muted">Нет операций, ожидающих подтверждения.</p>';
+    const buttons = o.kind === "fbs" ? `<button data-action="ship_fbs" data-id="${o.id}">Отправить FBS</button><button class="secondary" data-action="cancel_fbs" data-id="${o.id}">Отменить резерв</button>` : `<button data-action="receive_${o.kind}" data-id="${o.id}">${o.kind === "transfer" ? "Принять перемещение" : "Принять FBO"}</button>`;
+    return `<div class="item"><span><span class="operation-kind">${operationCopy[o.kind].result} #${o.id}</span><strong>${esc(o.sku)}</strong> · ${o.quantity} шт. · ${esc(o.source_name || "")} ${o.target_name ? `<span class="route-arrow">→</span> ${esc(o.target_name)}` : ""}</span><span class="actions">${buttons}</span></div>`;
+  }).join("") : '<p class="muted">Нет операций, ожидающих подтверждения</p>';
 }
 
 function renderStock(data) {
@@ -66,6 +90,9 @@ async function refresh() {
 }
 
 $("operation-form").elements.namedItem("kind").addEventListener("change", renderCatalog);
+$("operation-form").addEventListener("input", clearFeedback);
+$("operation-form").addEventListener("change", clearFeedback);
+$("warehouse-form").addEventListener("input", clearFeedback);
 $("refresh").addEventListener("click", () => refresh().catch((e) => message(e.message, true)));
 $("more-history").addEventListener("click", () => loadHistory(false).catch((e) => message(e.message, true)));
 
@@ -73,7 +100,7 @@ $("operation-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const button = form.querySelector('button[type="submit"]');
-  message("", false, "operation-message");
+  clearFeedback();
   const values = Object.fromEntries(new FormData(form));
   const common = {product_id: Number(values.product_id), quantity: Number(values.quantity), idempotency_key: form.dataset.key || crypto.randomUUID()};
   form.dataset.key = common.idempotency_key;
@@ -90,7 +117,7 @@ $("operation-form").addEventListener("submit", async (event) => {
     const result = await post(path, body);
     delete form.dataset.key;
     await refresh();
-    message(`Операция #${result.id} выполнена`, false, "operation-message");
+    showOperationResult(result.id, values.kind);
   } catch (error) { message(error.message, true, "operation-message"); }
   finally { button.disabled = false; }
 });
@@ -98,7 +125,7 @@ $("operation-form").addEventListener("submit", async (event) => {
 $("warehouse-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
-  message("", false, "warehouse-message");
+  clearFeedback();
   try {
     await post("/api/warehouses", {name: new FormData(form).get("name")});
     form.reset(); await refresh(); message("Склад добавлен", false, "warehouse-message");
@@ -109,13 +136,17 @@ $("warehouses").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const id = button.dataset.id;
-  message("", false, "warehouse-message");
+  clearFeedback();
   try {
     if (button.dataset.action === "archive") {
       if (!confirm("Архивировать склад? Остатки и история сохранятся.")) return;
       await request(`/api/warehouses/${id}`, {method: "DELETE"});
       await refresh();
       message("Склад архивирован", false, "warehouse-message");
+    } else if (button.dataset.action === "restore") {
+      await post(`/api/warehouses/${id}/restore`, {});
+      await refresh();
+      message("Склад восстановлен — снова доступен для операций", false, "warehouse-message");
     } else {
       const old = catalog.warehouses.find((w) => String(w.id) === id);
       const name = prompt("Новое название склада", old.name);
@@ -130,12 +161,13 @@ $("warehouses").addEventListener("click", async (event) => {
 $("pending").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
-  message("", false, "pending-message");
+  clearFeedback();
   const action = button.dataset.action;
   const id = button.dataset.id;
   const path = action.endsWith("fbs") ? `/api/fbs/reservations/${id}/${action === "ship_fbs" ? "ship" : "cancel"}` : action === "receive_transfer" ? `/api/transfers/${id}/receive` : `/api/fbo/shipments/${id}/receive`;
   button.disabled = true;
-  try { await post(path, {}); await refresh(); message(`Операция #${id} подтверждена`, false, "pending-message"); }
+  const results = {ship_fbs: `Заказ FBS #${id} отправлен клиенту`, cancel_fbs: `Резерв FBS #${id} отменён`, receive_transfer: `Перемещение #${id} принято`, receive_fbo: `Поставка FBO #${id} принята маркетплейсом`};
+  try { await post(path, {}); await refresh(); message(results[action], false, "pending-message"); }
   catch (error) { message(error.message, true, "pending-message"); button.disabled = false; }
 });
 

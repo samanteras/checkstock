@@ -125,3 +125,8 @@ def rename_warehouse(warehouse_id: int, body: WarehouseName):
 @app.delete("/api/warehouses/{warehouse_id}")
 def archive_warehouse(warehouse_id: int):
     return inventory.archive_warehouse(warehouse_id)
+
+
+@app.post("/api/warehouses/{warehouse_id}/restore")
+def restore_warehouse(warehouse_id: int):
+    return inventory.restore_warehouse(warehouse_id)

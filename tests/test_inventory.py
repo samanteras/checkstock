@@ -155,6 +155,42 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(self.balance("SKU-101", "Север")["physical"], 8)
         self.assertEqual(self.balance("SKU-101", "Юг")["physical"], 8)
 
+    def test_restore_preserves_inventory_and_reenables_operations(self):
+        warehouse = self.w["Север"]
+        inventory.reserve_fbs(self.p["SKU-101"], warehouse, 2, "before-restore")
+        inventory.send_transfer(self.p["SKU-101"], warehouse, self.w["Юг"], 1, "pending-restore")
+        before = inventory.stock_snapshot()
+        history = inventory.list_history()
+        pending = inventory.catalog()["open_operations"]
+        inventory.archive_warehouse(warehouse)
+        with TestClient(app) as client:
+            first = client.post(f"/api/warehouses/{warehouse}/restore")
+            second = client.post(f"/api/warehouses/{warehouse}/restore")
+        self.assertEqual(first.status_code, 200)
+        self.assertIsNone(first.json()["archived_at"])
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json(), second.json())
+        self.assertEqual(inventory.stock_snapshot(), before)
+        self.assertEqual(inventory.list_history(), history)
+        self.assertEqual(inventory.catalog()["open_operations"], pending)
+        inventory.receive_stock(self.p["SKU-101"], warehouse, 3, "restored-receipt")
+        inventory.reserve_fbs(self.p["SKU-101"], warehouse, 1, "restored-reserve")
+        transfer = inventory.send_transfer(self.p["SKU-101"], self.w["Юг"], warehouse, 1, "restored-target")
+        inventory.transition(transfer["id"], "receive_transfer")
+        self.assertEqual(self.balance("SKU-101", "Север"), {"physical": 13, "reserved_fbs": 3, "available": 10})
+        self.assertEqual(self.event_count(), 6)
+
+    def test_restore_missing_warehouse_changes_nothing(self):
+        before = inventory.stock_snapshot()
+        catalog = inventory.catalog()
+        history = inventory.list_history()
+        with TestClient(app) as client:
+            response = client.post("/api/warehouses/999999/restore")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(inventory.stock_snapshot(), before)
+        self.assertEqual(inventory.catalog(), catalog)
+        self.assertEqual(inventory.list_history(), history)
+
     def test_started_operations_can_finish_after_archive(self):
         reserve = inventory.reserve_fbs(self.p["SKU-101"], self.w["Север"], 2, "before-archive")
         transfer = inventory.send_transfer(self.p["SKU-101"], self.w["Север"], self.w["Юг"], 2, "to-south")

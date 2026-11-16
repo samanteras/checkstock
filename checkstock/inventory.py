@@ -238,6 +238,13 @@ def archive_warehouse(warehouse_id: int):
                     "WHERE id = %s RETURNING *", (warehouse_id,))
 
 
+def restore_warehouse(warehouse_id: int):
+    with connect() as conn:
+        _warehouses(conn, [warehouse_id])
+        return _row(conn, "UPDATE warehouses SET archived_at = NULL WHERE id = %s RETURNING *",
+                    (warehouse_id,))
+
+
 def stock_snapshot():
     """Both reads use one MVCC snapshot, including concurrent transfer commits."""
     with connect() as conn:
