@@ -3,9 +3,9 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({"&":"&am
 let catalog = {products: [], warehouses: [], open_operations: []};
 let historyCursor = null;
 
-function message(text, error = false) {
-  $("message").textContent = text;
-  $("message").className = error ? "error" : "";
+function message(text, error = false, target = "message") {
+  $(target).textContent = text;
+  $(target).classList.toggle("error", error);
 }
 
 async function request(path, options = {}) {
@@ -73,6 +73,7 @@ $("operation-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const button = form.querySelector('button[type="submit"]');
+  message("", false, "operation-message");
   const values = Object.fromEntries(new FormData(form));
   const common = {product_id: Number(values.product_id), quantity: Number(values.quantity), idempotency_key: form.dataset.key || crypto.randomUUID()};
   form.dataset.key = common.idempotency_key;
@@ -89,50 +90,53 @@ $("operation-form").addEventListener("submit", async (event) => {
     const result = await post(path, body);
     delete form.dataset.key;
     await refresh();
-    message(`Операция #${result.id} выполнена`);
-  } catch (error) { message(error.message, true); }
+    message(`Операция #${result.id} выполнена`, false, "operation-message");
+  } catch (error) { message(error.message, true, "operation-message"); }
   finally { button.disabled = false; }
 });
 
 $("warehouse-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
+  message("", false, "warehouse-message");
   try {
     await post("/api/warehouses", {name: new FormData(form).get("name")});
-    form.reset(); await refresh(); message("Склад добавлен");
-  } catch (error) { message(error.message, true); }
+    form.reset(); await refresh(); message("Склад добавлен", false, "warehouse-message");
+  } catch (error) { message(error.message, true, "warehouse-message"); }
 });
 
 $("warehouses").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const id = button.dataset.id;
+  message("", false, "warehouse-message");
   try {
     if (button.dataset.action === "archive") {
       if (!confirm("Архивировать склад? Остатки и история сохранятся.")) return;
       await request(`/api/warehouses/${id}`, {method: "DELETE"});
       await refresh();
-      message("Склад архивирован");
+      message("Склад архивирован", false, "warehouse-message");
     } else {
       const old = catalog.warehouses.find((w) => String(w.id) === id);
       const name = prompt("Новое название склада", old.name);
       if (name === null) return;
       await request(`/api/warehouses/${id}`, {method: "PATCH", body: JSON.stringify({name})});
       await refresh();
-      message("Склад переименован");
+      message("Склад переименован", false, "warehouse-message");
     }
-  } catch (error) { message(error.message, true); }
+  } catch (error) { message(error.message, true, "warehouse-message"); }
 });
 
 $("pending").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
+  message("", false, "pending-message");
   const action = button.dataset.action;
   const id = button.dataset.id;
   const path = action.endsWith("fbs") ? `/api/fbs/reservations/${id}/${action === "ship_fbs" ? "ship" : "cancel"}` : action === "receive_transfer" ? `/api/transfers/${id}/receive` : `/api/fbo/shipments/${id}/receive`;
   button.disabled = true;
-  try { await post(path, {}); await refresh(); message(`Операция #${id} подтверждена`); }
-  catch (error) { message(error.message, true); button.disabled = false; }
+  try { await post(path, {}); await refresh(); message(`Операция #${id} подтверждена`, false, "pending-message"); }
+  catch (error) { message(error.message, true, "pending-message"); button.disabled = false; }
 });
 
 refresh().catch((error) => message(`Не удалось загрузить данные: ${error.message}`, true));
