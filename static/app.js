@@ -88,8 +88,8 @@ $("operation-form").addEventListener("submit", async (event) => {
   try {
     const result = await post(path, body);
     delete form.dataset.key;
-    message(`Операция #${result.id} выполнена`);
     await refresh();
+    message(`Операция #${result.id} выполнена`);
   } catch (error) { message(error.message, true); }
   finally { button.disabled = false; }
 });
@@ -99,7 +99,7 @@ $("warehouse-form").addEventListener("submit", async (event) => {
   const form = event.currentTarget;
   try {
     await post("/api/warehouses", {name: new FormData(form).get("name")});
-    form.reset(); message("Склад добавлен"); await refresh();
+    form.reset(); await refresh(); message("Склад добавлен");
   } catch (error) { message(error.message, true); }
 });
 
@@ -111,15 +111,16 @@ $("warehouses").addEventListener("click", async (event) => {
     if (button.dataset.action === "archive") {
       if (!confirm("Архивировать склад? Остатки и история сохранятся.")) return;
       await request(`/api/warehouses/${id}`, {method: "DELETE"});
+      await refresh();
       message("Склад архивирован");
     } else {
       const old = catalog.warehouses.find((w) => String(w.id) === id);
       const name = prompt("Новое название склада", old.name);
       if (name === null) return;
       await request(`/api/warehouses/${id}`, {method: "PATCH", body: JSON.stringify({name})});
+      await refresh();
       message("Склад переименован");
     }
-    await refresh();
   } catch (error) { message(error.message, true); }
 });
 
@@ -130,7 +131,7 @@ $("pending").addEventListener("click", async (event) => {
   const id = button.dataset.id;
   const path = action.endsWith("fbs") ? `/api/fbs/reservations/${id}/${action === "ship_fbs" ? "ship" : "cancel"}` : action === "receive_transfer" ? `/api/transfers/${id}/receive` : `/api/fbo/shipments/${id}/receive`;
   button.disabled = true;
-  try { await post(path, {}); message(`Операция #${id} подтверждена`); await refresh(); }
+  try { await post(path, {}); await refresh(); message(`Операция #${id} подтверждена`); }
   catch (error) { message(error.message, true); button.disabled = false; }
 });
 

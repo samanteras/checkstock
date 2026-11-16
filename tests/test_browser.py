@@ -11,7 +11,7 @@ class BrowserFlowTests(unittest.TestCase):
         if not base_url:
             self.skipTest("Set CHECKSTOCK_BASE_URL to a running seeded CheckStock app")
         try:
-            from playwright.sync_api import sync_playwright
+            from playwright.sync_api import expect, sync_playwright
         except ImportError:
             self.skipTest("Install requirements-browser.txt and run playwright install chromium")
 
@@ -31,7 +31,7 @@ class BrowserFlowTests(unittest.TestCase):
                 page.locator('#operation-form button[type="submit"]').click()
                 page.get_by_text("Операция #", exact=False).wait_for()
                 row = page.locator("#balances tr").filter(has_text="SKU-103").filter(has_text=warehouse)
-                self.assertEqual(row.locator("td").nth(5).inner_text(), "2")
-                self.assertIn("Приход", page.locator("#history").inner_text())
+                expect(row.locator("td").nth(5)).to_have_text("2")
+                expect(page.locator("#history")).to_contain_text("Приход")
             finally:
                 browser.close()
