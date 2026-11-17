@@ -18,6 +18,17 @@ function clearFeedback() {
   for (const id of ["message", "operation-message", "warehouse-message", "pending-message"]) message("", false, id);
 }
 
+function confirmArchive(warehouse) {
+  const dialog = $("archive-dialog");
+  if (dialog.open) return Promise.resolve(false);
+  $("archive-name").textContent = warehouse.name;
+  dialog.returnValue = "cancel";
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), {once: true});
+    dialog.showModal();
+  });
+}
+
 function showOperationResult(id, kind) {
   const copy = operationCopy[kind];
   message(`${copy.result} #${id} ${copy.next}`, false, "operation-message");
@@ -139,7 +150,9 @@ $("warehouses").addEventListener("click", async (event) => {
   clearFeedback();
   try {
     if (button.dataset.action === "archive") {
-      if (!confirm("Архивировать склад? Остатки и история сохранятся.")) return;
+      const warehouse = catalog.warehouses.find((w) => String(w.id) === id);
+      if (!await confirmArchive(warehouse)) return;
+      button.disabled = true;
       await request(`/api/warehouses/${id}`, {method: "DELETE"});
       await refresh();
       message("Склад архивирован", false, "warehouse-message");
@@ -156,6 +169,7 @@ $("warehouses").addEventListener("click", async (event) => {
       message("Склад переименован", false, "warehouse-message");
     }
   } catch (error) { message(error.message, true, "warehouse-message"); }
+  finally { button.disabled = false; }
 });
 
 $("pending").addEventListener("click", async (event) => {

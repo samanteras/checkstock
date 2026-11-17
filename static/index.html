@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CheckStock — где сейчас товар?</title>
-  <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/app.js" defer></script>
+  <link rel="stylesheet" href="/static/style.css?v=20261117-archive-dialog">
+  <script src="/static/app.js?v=20261117-archive-dialog" defer></script>
 </head>
 <body>
   <header><div class="wrap"><span class="brand">CheckStock</span><h1>Где сейчас товар?</h1><p>Остатки, резервы и отправки в одном месте</p></div></header>
@@ -20,5 +20,16 @@
     <section class="panel" id="pending-section" tabindex="-1"><h2>Ожидают подтверждения</h2><p id="pending-message" class="form-message" role="status" aria-live="polite"></p><div id="pending"></div></section>
     <section class="panel"><h2>История движений</h2><div class="table-wrap"><table><thead><tr><th>Операция / запись</th><th>Действие</th><th>Артикул</th><th class="num">Количество</th><th>Откуда</th><th>Куда</th></tr></thead><tbody id="history"></tbody></table></div><button id="more-history" type="button" hidden>Показать ещё</button></section>
   </main>
+  <dialog id="archive-dialog" aria-labelledby="archive-title" aria-describedby="archive-description">
+    <form method="dialog">
+      <h2 id="archive-title">Архивировать склад?</h2>
+      <p id="archive-name"></p>
+      <p id="archive-description">Остатки и история сохранятся. Новые приходы и резервы будут недоступны. Склад можно восстановить в любой момент.</p>
+      <div class="dialog-actions">
+        <button class="secondary" value="cancel" autofocus>Отмена</button>
+        <button class="danger" value="confirm">Архивировать</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>
